@@ -1,4 +1,4 @@
-package simplemaria
+package simplesqlite
 
 import (
 	"crypto/sha256"
@@ -23,9 +23,8 @@ const (
 func TestLocalConnection(t *testing.T) {
 	Verbose = true
 
-	//err := TestConnection() // locally
-	err := TestConnectionHost("travis:@127.0.0.1/") // for travis-ci
-	//err := TestConnectionHost("go:go@/main") // laptop
+	//err := TestConnection() // default filename
+	err := TestConnectionFile("sqlite.db")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -34,12 +33,11 @@ func TestLocalConnection(t *testing.T) {
 func TestList(t *testing.T) {
 	Verbose = true
 
-	//host := New() // locally
-	host := NewHost("travis:@127.0.0.1/") // for travis-ci
-	//host := NewHost("go:go@/main") // laptop
+	//file := New() // default filename
+	file := NewFile("sqlite.db")
 
-	defer host.Close()
-	list, err := NewList(host, listname)
+	defer file.Close()
+	list, err := NewList(file, listname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -99,12 +97,11 @@ func TestList(t *testing.T) {
 func TestSet(t *testing.T) {
 	Verbose = true
 
-	//host := New() // locally
-	host := NewHost("travis:@127.0.0.1/") // for travis-ci
-	//host := NewHost("go:go@/main") // laptop
+	//file := New() // default filename
+	file := NewFile("sqlite.db")
 
-	defer host.Close()
-	set, err := NewSet(host, setname)
+	defer file.Close()
+	set, err := NewSet(file, setname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -151,14 +148,11 @@ func TestSet(t *testing.T) {
 func TestRawSet(t *testing.T) {
 	Verbose = true
 
-	//host := New() // locally
-	host := NewHost("travis:@127.0.0.1/") // for travis-ci
-	//host := NewHost("go:go@/main") // laptop
+	//file := New() // default filename
+	file := NewFile("sqlite.db")
 
-	host.SetRawUTF8(true)
-
-	defer host.Close()
-	set, err := NewSet(host, setname)
+	defer file.Close()
+	set, err := NewSet(file, setname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -205,12 +199,11 @@ func TestRawSet(t *testing.T) {
 func TestHashMap(t *testing.T) {
 	Verbose = true
 
-	//host := New() // locally
-	host := NewHost("travis:@127.0.0.1/") // for travis-ci
-	//host := NewHost("go:go@/main") // laptop
+	//file := New() // default filename
+	file := NewFile("sqlite.db")
 
-	defer host.Close()
-	hashmap, err := NewHashMap(host, hashmapname)
+	defer file.Close()
+	hashmap, err := NewHashMap(file, hashmapname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -275,12 +268,11 @@ func TestHashMap(t *testing.T) {
 func TestKeyValue(t *testing.T) {
 	Verbose = true
 
-	//host := New() // locally
-	host := NewHost("travis:@127.0.0.1/") // for travis-ci
-	//host := NewHost("go:go@/main") // laptop
+	//file := New() // default filename
+	file := NewFile("sqlite.db")
 
-	defer host.Close()
-	keyvalue, err := NewKeyValue(host, keyvaluename)
+	defer file.Close()
+	keyvalue, err := NewKeyValue(file, keyvaluename)
 	if err != nil {
 		t.Error(err)
 	}
@@ -314,12 +306,11 @@ func TestKeyValue(t *testing.T) {
 func TestHashStorage(t *testing.T) {
 	Verbose = true
 
-	//host := New() // locally
-	host := NewHost("travis:@127.0.0.1/") // for travis-ci
-	//host := NewHost("go:go@/main") // laptop
+	//file := New() // default filename
+	file := NewFile("sqlite.db")
 
-	defer host.Close()
-	hashmap, err := NewHashMap(host, hashmapname)
+	defer file.Close()
+	hashmap, err := NewHashMap(file, hashmapname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -385,9 +376,9 @@ func TestInc(t *testing.T) {
 		testvalue1 = "10"
 		testvalue2 = "1"
 	)
-	host := NewHost("travis:@127.0.0.1/") // for travis-ci
-	defer host.Close()
-	kv, err := NewKeyValue(host, kvname)
+	file := NewFile("sqlite.db")
+	defer file.Close()
+	kv, err := NewKeyValue(file, kvname)
 	if err != nil {
 		t.Error(err)
 	}

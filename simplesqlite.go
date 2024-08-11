@@ -1,7 +1,8 @@
-// Package simplemaria offers a simple way to use a MySQL/MariaDB database.
-// This database backend is interchangeable with xyproto/simpleredis and
+// Package simplesqlite offers a simple way to use a SQlite database.
+// This database backend is interchangeable with xyproto/simpleredis, xyproto/simplesql
 // xyproto/simplebolt, since they all use xyproto/pinterface.
-package simplemaria
+// Based on xyproto/simplemaria
+package simplesqlite
 
 import (
 	"errors"
@@ -13,7 +14,7 @@ import (
 
 	"database/sql"
 
-	_ "github.com/go-mysql-org/go-mysql/driver"
+	_ "github.com/mattn/go-sqlite3" //sqlite3
 )
 
 const (
@@ -21,16 +22,14 @@ const (
 	Version = 3.2
 )
 
-// Host represents a specific database at a database host
-type Host struct {
-	db      *sql.DB
-	dbname  string
-	rawUTF8 bool
+// File represents a specific database
+type File struct {
+	db *sql.DB
 }
 
 // Common for each of the db datastructures used here
 type dbDatastructure struct {
-	host  *Host
+	file  *File
 	table string
 }
 
@@ -43,14 +42,8 @@ type (
 
 const (
 	// The default "username:password@host:port/database" that the database is running at
-	defaultDatabaseServer = "localhost" // "username:password@server:port/"
-	defaultDatabaseName   = "test"      // "main"
-	defaultStringType     = "TEXT"      // "VARCHAR(65535)"
-	defaultPort           = 3306
-	defaultUser           = "user"
-
-	// Requires MySQL >= 5.53 and MariaDB >= ? for utf8mb4
-	charset = "utf8mb4" // "utf8"
+	defaultDatabaseFile = "sqlite.db"
+	defaultStringType   = "TEXT" // "VARCHAR(65535)"
 
 	// Column names
 	listCol  = "a_list"
@@ -62,15 +55,14 @@ const (
 
 // Test if the local database server is up and running.
 func TestConnection() (err error) {
-	return TestConnectionHost(defaultDatabaseServer)
+	return TestConnectionFile(defaultDatabaseFile)
 }
 
 // Test if a given database server is up and running.
-// connectionString may be on the form "username:password@host:port/database".
-func TestConnectionHost(connectionString string) (err error) {
-	newConnectionString, _ := rebuildConnectionString(connectionString)
-	// Connect to the given host:port
-	db, err := sql.Open("mysql", newConnectionString)
+// connectionString may be on the form "sqlite.db&cache=shared&mode=memory".
+func TestConnectionFile(connectionString string) (err error) {
+	// Connect to the given string
+	db, err := sql.Open("sqlite3", connectionString)
 	if err != nil {
 		return err
 	}
@@ -86,174 +78,64 @@ func TestConnectionHost(connectionString string) (err error) {
 	return err
 }
 
-// Test if a given database server is up and running.
-func TestConnectionHostWithDSN(connectionString string) (err error) {
-	// Connect to the given host:port
-	db, err := sql.Open("mysql", connectionString)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	err = db.Ping()
-	if Verbose {
-		if err != nil {
-			log.Println("Ping: failed")
-		} else {
-			log.Println("Ping: ok")
-		}
-	}
-	return err
-}
-
-/* --- Host functions --- */
+/* --- File functions --- */
 
 // Create a new database connection.
-// connectionString may be on the form "username:password@host:port/database".
-func NewHost(connectionString string) *Host {
-	// Use env.Str to fetch environment variables with defaults
-	hostname := env.Str("MARIADB_HOST", defaultDatabaseServer)
-	port := env.Str("MARIADB_PORT", strconv.Itoa(defaultPort))
-	user := env.Str("MARIADB_USER", defaultUser)
-	password := env.Str("MARIADB_PASSWORD")
-	dbname := env.Str("MARIADB_DBNAME", defaultDatabaseName)
-	// Rebuild the connection string with potential new values from environment
-	var newConnectionString string
-	if password != "" {
-		newConnectionString = fmt.Sprintf("%s:%s@%s:%s/%s", user, password, hostname, port, dbname)
-	} else {
-		newConnectionString = fmt.Sprintf("%s@%s:%s/%s", user, hostname, port, dbname)
-	}
-	db, err := sql.Open("mysql", newConnectionString)
+// connectionString may be on the form "sqlite.db&cache=shared&mode=memory".
+func NewFile(connectionString string) *File {
+	db, err := sql.Open("sqlite3", connectionString)
 	if err != nil {
-		log.Fatalln("Could not connect to " + newConnectionString + "!")
+		log.Fatalln("Could not open " + connectionString + "!")
 	}
-	host := &Host{db, dbname, false}
-	if err := host.Ping(); err != nil {
-		log.Fatalln("Host does not reply to ping: " + err.Error())
+	file := &File{db}
+	if err := file.Ping(); err != nil {
+		log.Fatalln("File does not reply to ping: " + err.Error())
 	}
-	if err := host.createDatabase(); err != nil {
-		log.Fatalln("Could not create database " + host.dbname + ": " + err.Error())
-	}
-	if err := host.useDatabase(); err != nil {
-		panic("Could not use database " + host.dbname + ": " + err.Error())
-	}
-	return host
-}
 
-// Create a new database connection with a valid DSN.
-func NewHostWithDSN(connectionString string, dbname string) *Host {
-
-	db, err := sql.Open("mysql", connectionString)
-	if err != nil {
-		log.Fatalln("Could not connect to " + connectionString + "!")
-	}
-	host := &Host{db, dbname, false}
-	if err := host.Ping(); err != nil {
-		log.Fatalln("Host does not reply to ping: " + err.Error())
-	}
-	if err := host.createDatabase(); err != nil {
-		log.Fatalln("Could not create database " + host.dbname + ": " + err.Error())
-	}
-	if err := host.useDatabase(); err != nil {
-		panic("Could not use database " + host.dbname + ": " + err.Error())
-	}
-	return host
+	return file
 }
 
 // The default database connection
-func New() *Host {
-	user := env.Str("MARIADB_USER", defaultUser)
-	password := env.Str("MARIADB_PASSWORD")
-	host := env.Str("MARIADB_HOST", defaultDatabaseServer)
-	port := env.Str("MARIADB_PORT", strconv.Itoa(defaultPort))
-	dbname := env.Str("MARIADB_DBNAME", defaultDatabaseName)
+func New() *File {
+	filename := env.Str("SQLITE_FILE", defaultDatabaseFile)
 
-	// Build the connection string based on whether a password is provided
-	var connectionString string
-	if password == "" {
-		connectionString = fmt.Sprintf("%s@%s:%s/%s", user, host, port, dbname)
-	} else {
-		connectionString = fmt.Sprintf("%s:%s@%s:%s/%s", user, password, host, port, dbname)
-	}
-
-	return NewHost(connectionString)
-}
-
-// Should the UTF-8 data be raw, and not hex encoded and compressed?
-func (host *Host) SetRawUTF8(enabled bool) {
-	host.rawUTF8 = enabled
-}
-
-// Select a different database. Create the database if needed.
-func (host *Host) SelectDatabase(dbname string) error {
-	host.dbname = dbname
-	if err := host.createDatabase(); err != nil {
-		return err
-	}
-	if err := host.useDatabase(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Will create the database if it does not already exist
-func (host *Host) createDatabase() error {
-	if _, err := host.db.Exec("CREATE DATABASE IF NOT EXISTS " + host.dbname + " CHARACTER SET = " + charset); err != nil {
-		return err
-	}
-	if Verbose {
-		log.Println("Created database " + host.dbname)
-	}
-	return nil
-}
-
-// Use the host.dbname database
-func (host *Host) useDatabase() error {
-	if _, err := host.db.Exec("USE " + host.dbname); err != nil {
-		return err
-	}
-	if Verbose {
-		log.Println("Using database " + host.dbname)
-	}
-	return nil
+	return NewFile(filename)
 }
 
 // Close the connection
-func (host *Host) Close() {
-	host.db.Close()
+func (file *File) Close() {
+	file.db.Close()
 }
 
-// Ping the host
-func (host *Host) Ping() error {
-	return host.db.Ping()
+// Ping the file
+func (file *File) Ping() error {
+	return file.db.Ping()
 }
 
 /* --- List functions --- */
 
 // Create a new list. Lists are ordered.
-func NewList(host *Host, name string) (*List, error) {
-	l := &List{host, name}
-	if _, err := l.host.db.Exec("CREATE TABLE IF NOT EXISTS " + name + " (id INT PRIMARY KEY AUTO_INCREMENT, " + listCol + " " + defaultStringType + ")"); err != nil {
+func NewList(file *File, name string) (*List, error) {
+	l := &List{file, name}
+	if _, err := l.file.db.Exec("CREATE TABLE IF NOT EXISTS " + name + " (id INTEGER PRIMARY KEY, " + listCol + " " + defaultStringType + ")"); err != nil {
 		return nil, err
 	}
 	if Verbose {
-		log.Println("Created table " + name + " in database " + host.dbname)
+		log.Println("Created table " + name + " in database")
 	}
 	return l, nil
 }
 
 // Add an element to the list
 func (l *List) Add(value string) error {
-	if !l.host.rawUTF8 {
-		Encode(&value)
-	}
-	_, err := l.host.db.Exec("INSERT INTO "+l.table+" ("+listCol+") VALUES (?)", value)
+
+	_, err := l.file.db.Exec("INSERT INTO "+l.table+" ("+listCol+") VALUES (?)", value)
 	return err
 }
 
 // Get all elements of a list
 func (l *List) All() ([]string, error) {
-	rows, err := l.host.db.Query("SELECT " + listCol + " FROM " + l.table + " ORDER BY id")
+	rows, err := l.file.db.Query("SELECT " + listCol + " FROM " + l.table + " ORDER BY id")
 	if err != nil {
 		return []string{}, err
 	}
@@ -264,9 +146,7 @@ func (l *List) All() ([]string, error) {
 	)
 	for rows.Next() {
 		err = rows.Scan(&value)
-		if !l.host.rawUTF8 {
-			Decode(&value)
-		}
+
 		values = append(values, value)
 		if err != nil {
 			// Unusual, worthy of panic
@@ -289,7 +169,7 @@ func (l *List) GetAll() ([]string, error) {
 func (l *List) Last() (string, error) {
 	// Fetches the item with the largest id.
 	// Faster than "ORDER BY id DESC limit 1" for large tables.
-	rows, err := l.host.db.Query("SELECT " + listCol + " FROM " + l.table + " WHERE id = (SELECT MAX(id) FROM " + l.table + ")")
+	rows, err := l.file.db.Query("SELECT " + listCol + " FROM " + l.table + " WHERE id = (SELECT MAX(id) FROM " + l.table + ")")
 	if err != nil {
 		return "", err
 	}
@@ -307,9 +187,7 @@ func (l *List) Last() (string, error) {
 		// Unusual, worthy of panic
 		panic(err.Error())
 	}
-	if !l.host.rawUTF8 {
-		Decode(&value)
-	}
+
 	return value, nil
 }
 
@@ -320,7 +198,7 @@ func (l *List) GetLast() (string, error) {
 
 // Get the last N elements of a list
 func (l *List) LastN(n int) ([]string, error) {
-	rows, err := l.host.db.Query("SELECT " + listCol + " FROM (SELECT * FROM " + l.table + " ORDER BY id DESC limit " + strconv.Itoa(n) + ")sub ORDER BY id ASC")
+	rows, err := l.file.db.Query("SELECT " + listCol + " FROM (SELECT * FROM " + l.table + " ORDER BY id DESC limit " + strconv.Itoa(n) + ")sub ORDER BY id ASC")
 	if err != nil {
 		return []string{}, err
 	}
@@ -331,9 +209,7 @@ func (l *List) LastN(n int) ([]string, error) {
 	)
 	for rows.Next() {
 		err = rows.Scan(&value)
-		if !l.host.rawUTF8 {
-			Decode(&value)
-		}
+
 		values = append(values, value)
 		if err != nil {
 			// Unusual, worthy of panic
@@ -358,27 +234,27 @@ func (l *List) GetLastN(n int) ([]string, error) {
 // Remove this list
 func (l *List) Remove() error {
 	// Remove the table
-	_, err := l.host.db.Exec("DROP TABLE " + l.table)
+	_, err := l.file.db.Exec("DROP TABLE " + l.table)
 	return err
 }
 
 // Clear the list contents
 func (l *List) Clear() error {
 	// Clear the table
-	_, err := l.host.db.Exec("TRUNCATE TABLE " + l.table)
+	_, err := l.file.db.Exec("TRUNCATE TABLE " + l.table)
 	return err
 }
 
 /* --- Set functions --- */
 
 // Create a new set
-func NewSet(host *Host, name string) (*Set, error) {
-	s := &Set{host, name}
-	if _, err := s.host.db.Exec("CREATE TABLE IF NOT EXISTS " + name + " (" + setCol + " " + defaultStringType + ")"); err != nil {
+func NewSet(file *File, name string) (*Set, error) {
+	s := &Set{file, name}
+	if _, err := s.file.db.Exec("CREATE TABLE IF NOT EXISTS " + name + " (" + setCol + " " + defaultStringType + ")"); err != nil {
 		return nil, err
 	}
 	if Verbose {
-		log.Println("Created table " + name + " in database " + host.dbname)
+		log.Println("Created table " + name + " in database")
 	}
 	return s, nil
 }
@@ -386,23 +262,19 @@ func NewSet(host *Host, name string) (*Set, error) {
 // Add an element to the set
 func (s *Set) Add(value string) error {
 	originalValue := value
-	if !s.host.rawUTF8 {
-		Encode(&value)
-	}
+
 	// Check if the value is not already there before adding
 	has, err := s.Has(originalValue)
 	if !has && (err == nil) {
-		_, err = s.host.db.Exec("INSERT INTO "+s.table+" ("+setCol+") VALUES (?)", value)
+		_, err = s.file.db.Exec("INSERT INTO "+s.table+" ("+setCol+") VALUES (?)", value)
 	}
 	return err
 }
 
 // Check if a given value is in the set
 func (s *Set) Has(value string) (bool, error) {
-	if !s.host.rawUTF8 {
-		Encode(&value)
-	}
-	rows, err := s.host.db.Query("SELECT "+setCol+" FROM "+s.table+" WHERE "+setCol+" = ?", value)
+
+	rows, err := s.file.db.Query("SELECT "+setCol+" FROM "+s.table+" WHERE "+setCol+" = ?", value)
 	if err != nil {
 		return false, err
 	}
@@ -430,7 +302,7 @@ func (s *Set) Has(value string) (bool, error) {
 
 // Get all elements of the set
 func (s *Set) All() ([]string, error) {
-	rows, err := s.host.db.Query("SELECT " + setCol + " FROM " + s.table)
+	rows, err := s.file.db.Query("SELECT " + setCol + " FROM " + s.table)
 	if err != nil {
 		return []string{}, err
 	}
@@ -441,9 +313,7 @@ func (s *Set) All() ([]string, error) {
 	)
 	for rows.Next() {
 		err = rows.Scan(&value)
-		if !s.host.rawUTF8 {
-			Decode(&value)
-		}
+
 		values = append(values, value)
 		if err != nil {
 			// Unusual, worthy of panic
@@ -464,49 +334,45 @@ func (s *Set) GetAll() ([]string, error) {
 
 // Remove an element from the set
 func (s *Set) Del(value string) error {
-	if !s.host.rawUTF8 {
-		Encode(&value)
-	}
+
 	// Remove a value from the table
-	_, err := s.host.db.Exec("DELETE FROM "+s.table+" WHERE "+setCol+" = ?", value)
+	_, err := s.file.db.Exec("DELETE FROM "+s.table+" WHERE "+setCol+" = ?", value)
 	return err
 }
 
 // Remove this set
 func (s *Set) Remove() error {
 	// Remove the table
-	_, err := s.host.db.Exec("DROP TABLE " + s.table)
+	_, err := s.file.db.Exec("DROP TABLE " + s.table)
 	return err
 }
 
 // Clear the list contents
 func (s *Set) Clear() error {
 	// Clear the table
-	_, err := s.host.db.Exec("TRUNCATE TABLE " + s.table)
+	_, err := s.file.db.Exec("TRUNCATE TABLE " + s.table)
 	return err
 }
 
 /* --- HashMap functions --- */
 
 // Create a new hashmap
-func NewHashMap(host *Host, name string) (*HashMap, error) {
-	h := &HashMap{host, name}
+func NewHashMap(file *File, name string) (*HashMap, error) {
+	h := &HashMap{file, name}
 	// Using three columns: element id, key and value
 	query := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s %s, %s %s, %s %s)", name, ownerCol, defaultStringType, keyCol, defaultStringType, valCol, defaultStringType)
-	if _, err := h.host.db.Exec(query); err != nil {
+	if _, err := h.file.db.Exec(query); err != nil {
 		return nil, err
 	}
 	if Verbose {
-		log.Println("Created table " + name + " in database " + host.dbname)
+		log.Println("Created table " + name + " in database")
 	}
 	return h, nil
 }
 
 // Set a value in a hashmap given the element id (for instance a user id) and the key (for instance "password")
 func (h *HashMap) Set(owner, key, value string) error {
-	if !h.host.rawUTF8 {
-		Encode(&value)
-	}
+
 	// See if the owner and key already exists
 	ok, err := h.Has(owner, key)
 	if err != nil {
@@ -516,12 +382,12 @@ func (h *HashMap) Set(owner, key, value string) error {
 		log.Printf("%s/%s exists? %v\n", owner, key, ok)
 	}
 	if ok {
-		_, err = h.host.db.Exec("UPDATE "+h.table+" SET "+valCol+" = ? WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", value, owner, key)
+		_, err = h.file.db.Exec("UPDATE "+h.table+" SET "+valCol+" = ? WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", value, owner, key)
 		if Verbose {
 			log.Println("Updated the table: " + h.table)
 		}
 	} else {
-		_, err = h.host.db.Exec("INSERT INTO "+h.table+" ("+ownerCol+", "+keyCol+", "+valCol+") VALUES (?, ?, ?)", owner, key, value)
+		_, err = h.file.db.Exec("INSERT INTO "+h.table+" ("+ownerCol+", "+keyCol+", "+valCol+") VALUES (?, ?, ?)", owner, key, value)
 		if Verbose {
 			log.Println("Added to the table: " + h.table)
 		}
@@ -531,7 +397,7 @@ func (h *HashMap) Set(owner, key, value string) error {
 
 // Get a value from a hashmap given the element id (for instance a user id) and the key (for instance "password").
 func (h *HashMap) Get(owner, key string) (string, error) {
-	rows, err := h.host.db.Query("SELECT "+valCol+" FROM "+h.table+" WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", owner, key)
+	rows, err := h.file.db.Query("SELECT "+valCol+" FROM "+h.table+" WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", owner, key)
 	if err != nil {
 		return "", err
 	}
@@ -554,15 +420,13 @@ func (h *HashMap) Get(owner, key string) (string, error) {
 	if counter == 0 {
 		return "", errors.New("No such owner/key: " + owner + "/" + key)
 	}
-	if !h.host.rawUTF8 {
-		Decode(&value)
-	}
+
 	return value, nil
 }
 
 // Check if a given owner + key is in the hash map
 func (h *HashMap) Has(owner, key string) (bool, error) {
-	rows, err := h.host.db.Query("SELECT "+valCol+" FROM "+h.table+" WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", owner, key)
+	rows, err := h.file.db.Query("SELECT "+valCol+" FROM "+h.table+" WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", owner, key)
 	if err != nil {
 		return false, err
 	}
@@ -590,7 +454,7 @@ func (h *HashMap) Has(owner, key string) (bool, error) {
 
 // Check if a given owner exists as a hash map at all
 func (h *HashMap) Exists(owner string) (bool, error) {
-	rows, err := h.host.db.Query("SELECT "+valCol+" FROM "+h.table+" WHERE "+ownerCol+" = ?", owner)
+	rows, err := h.file.db.Query("SELECT "+valCol+" FROM "+h.table+" WHERE "+ownerCol+" = ?", owner)
 	if err != nil {
 		return false, err
 	}
@@ -615,7 +479,7 @@ func (h *HashMap) Exists(owner string) (bool, error) {
 
 // Get all owners (not keys, not values) for all hash elements
 func (h *HashMap) All() ([]string, error) {
-	rows, err := h.host.db.Query("SELECT " + ownerCol + " FROM " + h.table)
+	rows, err := h.file.db.Query("SELECT " + ownerCol + " FROM " + h.table)
 	if err != nil {
 		return []string{}, err
 	}
@@ -646,7 +510,7 @@ func (h *HashMap) GetAll() ([]string, error) {
 
 // Get all keys for a given owner
 func (h *HashMap) Keys(owner string) ([]string, error) {
-	rows, err := h.host.db.Query("SELECT "+keyCol+" FROM "+h.table+" WHERE "+ownerCol+"= ?", owner)
+	rows, err := h.file.db.Query("SELECT "+keyCol+" FROM "+h.table+" WHERE "+ownerCol+"= ?", owner)
 	if err != nil {
 		return []string{}, err
 	}
@@ -673,14 +537,14 @@ func (h *HashMap) Keys(owner string) ([]string, error) {
 // Remove a key for an entry in a hashmap (for instance the email field for a user)
 func (h *HashMap) DelKey(owner, key string) error {
 	// Remove a key from the hashmap
-	_, err := h.host.db.Exec("DELETE FROM "+h.table+" WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", owner, key)
+	_, err := h.file.db.Exec("DELETE FROM "+h.table+" WHERE "+ownerCol+" = ? AND "+keyCol+" = ?", owner, key)
 	return err
 }
 
 // Remove an element (for instance a user)
 func (h *HashMap) Del(owner string) error {
 	// Remove an element id from the table
-	results, err := h.host.db.Exec("DELETE FROM "+h.table+" WHERE "+ownerCol+" = ?", owner)
+	results, err := h.file.db.Exec("DELETE FROM "+h.table+" WHERE "+ownerCol+" = ?", owner)
 	if err != nil {
 		return err
 	}
@@ -697,28 +561,28 @@ func (h *HashMap) Del(owner string) error {
 // Remove this hashmap
 func (h *HashMap) Remove() error {
 	// Remove the table
-	_, err := h.host.db.Exec("DROP TABLE " + h.table)
+	_, err := h.file.db.Exec("DROP TABLE " + h.table)
 	return err
 }
 
 // Clear the contents
 func (h *HashMap) Clear() error {
 	// Clear the table
-	_, err := h.host.db.Exec("TRUNCATE TABLE " + h.table)
+	_, err := h.file.db.Exec("TRUNCATE TABLE " + h.table)
 	return err
 }
 
 /* --- KeyValue functions --- */
 
 // Create a new key/value
-func NewKeyValue(host *Host, name string) (*KeyValue, error) {
-	kv := &KeyValue{host, name}
+func NewKeyValue(file *File, name string) (*KeyValue, error) {
+	kv := &KeyValue{file, name}
 	query := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s %s, %s %s)", name, keyCol, defaultStringType, valCol, defaultStringType)
-	if _, err := kv.host.db.Exec(query); err != nil {
+	if _, err := kv.file.db.Exec(query); err != nil {
 		return nil, err
 	}
 	if Verbose {
-		log.Println("Created table " + name + " in database " + host.dbname)
+		log.Println("Created table " + name + " in database")
 	}
 	return kv, nil
 
@@ -726,22 +590,20 @@ func NewKeyValue(host *Host, name string) (*KeyValue, error) {
 
 // Set a key and value
 func (kv *KeyValue) Set(key, value string) error {
-	if !kv.host.rawUTF8 {
-		Encode(&value)
-	}
+
 	if _, err := kv.Get(key); err != nil {
 		// Key does not exist, create it
-		_, err = kv.host.db.Exec("INSERT INTO "+kv.table+" ("+keyCol+", "+valCol+") VALUES (?, ?)", key, value)
+		_, err = kv.file.db.Exec("INSERT INTO "+kv.table+" ("+keyCol+", "+valCol+") VALUES (?, ?)", key, value)
 		return err
 	}
 	// Key exists, update the value
-	_, err := kv.host.db.Exec("UPDATE "+kv.table+" SET "+valCol+" = ? WHERE "+keyCol+" = ?", value, key)
+	_, err := kv.file.db.Exec("UPDATE "+kv.table+" SET "+valCol+" = ? WHERE "+keyCol+" = ?", value, key)
 	return err
 }
 
 // Get a value given a key
 func (kv *KeyValue) Get(key string) (string, error) {
-	rows, err := kv.host.db.Query("SELECT "+valCol+" FROM "+kv.table+" WHERE "+keyCol+" = ?", key)
+	rows, err := kv.file.db.Query("SELECT "+valCol+" FROM "+kv.table+" WHERE "+keyCol+" = ?", key)
 	if err != nil {
 		return "", err
 	}
@@ -764,9 +626,7 @@ func (kv *KeyValue) Get(key string) (string, error) {
 	if counter != 1 {
 		return "", errors.New("Wrong number of keys in KeyValue table: " + kv.table)
 	}
-	if !kv.host.rawUTF8 {
-		Decode(&value)
-	}
+
 	return value, nil
 }
 
@@ -785,7 +645,7 @@ func (kv *KeyValue) Inc(key string) (string, error) {
 	} else {
 		// The key does not exist, create a new one.
 		// This is to reflect the behavior of INCR in Redis.
-		NewKeyValue(kv.host, kv.table)
+		NewKeyValue(kv.file, kv.table)
 	}
 	// Num is now either 0 or the previous numeric value
 	num++
@@ -802,20 +662,20 @@ func (kv *KeyValue) Inc(key string) (string, error) {
 
 // Remove a key
 func (kv *KeyValue) Del(key string) error {
-	_, err := kv.host.db.Exec("DELETE FROM "+kv.table+" WHERE "+keyCol+" = ?", key)
+	_, err := kv.file.db.Exec("DELETE FROM "+kv.table+" WHERE "+keyCol+" = ?", key)
 	return err
 }
 
 // Remove this key/value
 func (kv *KeyValue) Remove() error {
 	// Remove the table
-	_, err := kv.host.db.Exec("DROP TABLE " + kv.table)
+	_, err := kv.file.db.Exec("DROP TABLE " + kv.table)
 	return err
 }
 
 // Clear this key/value
 func (kv *KeyValue) Clear() error {
 	// Remove the table
-	_, err := kv.host.db.Exec("TRUNCATE TABLE " + kv.table)
+	_, err := kv.file.db.Exec("TRUNCATE TABLE " + kv.table)
 	return err
 }

@@ -17,7 +17,7 @@ Features and limitations
 * Supports simple use of lists, hashmaps, sets and key/values.
 * Deals mainly with strings.
 * Uses the [sqlite](https://github.com/mattn/go-sqlite3) package.
-* Modeled after [simplesql](https://github.com/xyproto/simplemaria).
+* Modeled after [simplemaria](https://github.com/xyproto/simplemaria).
 * The hash maps behaves like hash maps, but are not backed by actual hashmaps, unlike with [simpleredis](https://github.com/xyproto/simpleredis). This is for keeping compatibility with simpleredis. If performance when scaling up is a concern, simpleredis backed by [redis](https://redis.io) might be a better choice.
 
 

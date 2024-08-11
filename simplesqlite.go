@@ -1,7 +1,8 @@
 // Package simplesqlite offers a simple way to use a SQlite database.
-// This database backend is interchangeable with xyproto/simpleredis, xyproto/simplesql
+// This database backend is interchangeable with xyproto/simpleredis, xyproto/simplemaria
 // xyproto/simplebolt, since they all use xyproto/pinterface.
 // Based on xyproto/simplemaria
+
 package simplesqlite
 
 import (

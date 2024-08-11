@@ -30,7 +30,7 @@ package main
 import (
     "log"
 
-    "github.com/xyproto/simplesqlite"
+    "github.com/terminar/simplesqlite"
 )
 
 func main() {

@@ -3,17 +3,17 @@ package main
 import (
 	"log"
 
-	"github.com/xyproto/simplemaria"
+	"github.com/terminar/simplesqlite"
 )
 
 func main() {
 	// Check if the simplemaria service is up
-	if err := simplemaria.TestConnection(); err != nil {
+	if err := simplesqlite.TestConnection(); err != nil {
 		log.Fatalln("Could not connect to local database. Is the service up and running?")
 	}
 
 	// Create a Host, connect to the local db server
-	host := simplemaria.New()
+	file := simplesqlite.New()
 
 	// Connecting to a different host/port
 	//host := simplemaria.NewHost("server:3306/db")
@@ -22,10 +22,10 @@ func main() {
 	// host := simplemaria.NewHost("username:password@server/db")
 
 	// Close the connection when the function returns
-	defer host.Close()
+	defer file.Close()
 
 	// Create a list named "greetings"
-	list, err := simplemaria.NewList(host, "greetings")
+	list, err := simplesqlite.NewList(file, "greetings")
 	if err != nil {
 		log.Fatalln("Could not create list!")
 	}

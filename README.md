@@ -1,14 +1,14 @@
-SimpleMaria
-===========
+SimpleSqlite
+============
 
-[![GoDoc](https://godoc.org/github.com/xyproto/simplemaria?status.svg)](http://godoc.org/github.com/xyproto/simplemaria)
+[![GoDoc](https://godoc.org/github.com/terminar/simplesqlite?status.svg)](http://godoc.org/github.com/terminar/simplesqlite)
 
-An easy way to use a MariaDB/MySQL database from Go.
+An easy way to use a SQLite database from Go.
 
 Online API Documentation
 ------------------------
 
-[godoc.org](http://godoc.org/github.com/xyproto/simplemaria)
+[godoc.org](http://godoc.org/github.com/xyproto/simplesqlite)
 
 
 Features and limitations
@@ -16,10 +16,9 @@ Features and limitations
 
 * Supports simple use of lists, hashmaps, sets and key/values.
 * Deals mainly with strings.
-* Uses the [mysql](https://github.com/go-sql-driver/mysql) package.
-* Modeled after [simpleredis](https://github.com/xyproto/simpleredis).
+* Uses the [sqlite](https://github.com/mattn/go-sqlite3) package.
+* Modeled after [simplesql](https://github.com/xyproto/simplemaria).
 * The hash maps behaves like hash maps, but are not backed by actual hashmaps, unlike with [simpleredis](https://github.com/xyproto/simpleredis). This is for keeping compatibility with simpleredis. If performance when scaling up is a concern, simpleredis backed by [redis](https://redis.io) might be a better choice.
-* MariaDB/MySQL normally has issues with variable size UTF-8 strings, even for for some combinations of characters. This package avoids these problems by compressing and hex encoding the data before storing in the database. This may slow down or speed up the time it takes to access the data, depending on your setup, but it's a safe way to encode *any* string. This behavior is optional and can be disabled with `host.SetRawUTF8(true)`, (to just use `utf8mb4`).
 
 
 Sample usage
@@ -31,29 +30,26 @@ package main
 import (
     "log"
 
-    "github.com/xyproto/simplemaria"
+    "github.com/xyproto/simplesqlite"
 )
 
 func main() {
-    // Check if the simplemaria service is up
+    // Check if the simplesqlite is working
     if err := db.TestConnection(); err != nil {
-        log.Fatalln("Could not connect to local database. Is the service up and running?")
+        log.Fatalln("Could not open database file.")
     }
 
-    // Create a Host, connect to the local db server
-    host := db.New()
+    // Create a new File
+    file := db.New()
 
-    // Connecting to a different host/port
-    //host := db.NewHost("server:3306/db")
-
-    // Connect to a different db host/port, with a username and password
-    // host := db.NewHost("username:password@server:port/db")
+    // Use another filename
+    //file := db.NewFile("sqlite.db")
 
     // Close the connection when the function returns
-    defer host.Close()
+    defer file.Close()
 
     // Create a list named "greetings"
-    list, err := db.NewList(host, "greetings")
+    list, err := db.NewList(file, "greetings")
     if err != nil {
         log.Fatalln("Could not create list!")
     }
@@ -80,11 +76,12 @@ func main() {
 Testing
 -------
 
-A MariaDB/MySQL Database must be up and running locally for `go test` to work.
+The tests will create a file (sqlite.db) for `go test` to work.
 
 Version, license and author
 ---------------------------
 
-* Version: 1.3.4
+* Version: 1.0.0
 * License: BSD-3
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
+* Author: Björn Kalkbrenner &lt;terminar@cyberphoria.org&gt;

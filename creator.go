@@ -1,4 +1,4 @@
-package simplemaria
+package simplesqlite
 
 import (
 	"github.com/xyproto/pinterface"
@@ -6,26 +6,26 @@ import (
 
 // For implementing pinterface.ICreator
 
-type MariaCreator struct {
-	host *Host
+type SQLiteCreator struct {
+	file *File
 }
 
-func NewCreator(host *Host) *MariaCreator {
-	return &MariaCreator{host}
+func NewCreator(file *File) *SQLiteCreator {
+	return &SQLiteCreator{file}
 }
 
-func (m *MariaCreator) NewList(id string) (pinterface.IList, error) {
-	return NewList(m.host, id)
+func (m *SQLiteCreator) NewList(id string) (pinterface.IList, error) {
+	return NewList(m.file, id)
 }
 
-func (m *MariaCreator) NewSet(id string) (pinterface.ISet, error) {
-	return NewSet(m.host, id)
+func (m *SQLiteCreator) NewSet(id string) (pinterface.ISet, error) {
+	return NewSet(m.file, id)
 }
 
-func (m *MariaCreator) NewHashMap(id string) (pinterface.IHashMap, error) {
-	return NewHashMap(m.host, id)
+func (m *SQLiteCreator) NewHashMap(id string) (pinterface.IHashMap, error) {
+	return NewHashMap(m.file, id)
 }
 
-func (m *MariaCreator) NewKeyValue(id string) (pinterface.IKeyValue, error) {
-	return NewKeyValue(m.host, id)
+func (m *SQLiteCreator) NewKeyValue(id string) (pinterface.IKeyValue, error) {
+	return NewKeyValue(m.file, id)
 }
